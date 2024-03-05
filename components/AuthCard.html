@@ -3,13 +3,6 @@
   <hgroup>
     <h1>Login</h1>
   </hgroup>
-  {{- range $name, $provider := .Providers }}
-  <a type="button" id="{{ $name }}-sign-in" href="/login?provider={{ $name }}"
-    >Sign In with {{ $provider.DisplayName }}</a
-  >
-  {{- end }} {{- if and .SelfHostUsers (.Providers) }}
-  <hr />
-  {{- end }} {{- if .SelfHostUsers }}
   <form _="on submit halt the event">
     <fieldset>
       <label>
@@ -47,13 +40,5 @@
       Sign In with Security Key
     </button>
   </form>
-  <small
-    >You can use
-    <a href="https://vault.bitwarden.com/#/register?org=free&layout=default"
-      >Bitwarden</a
-    >
-    as a WebAuthn authenticator.</small
-  >
-  {{- end }}
 </article>
 {{ end }}

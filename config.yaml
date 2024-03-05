@@ -17,5 +17,3 @@ providers:
     ## This points to "https://accounts.google.com/.well-known/openid-configuration
     endpoint: https://accounts.google.com
 
-## Self-host users, use database as identity provider and use webauthn as authentication provider.
-selfHostUsers: false

@@ -18,7 +18,6 @@ import (
 	"embed"
 
 	"github.com/Darkness4/auth-htmx/auth"
-	"github.com/Darkness4/auth-htmx/auth/oauth"
 	internalwebauthn "github.com/Darkness4/auth-htmx/auth/webauthn"
 	"github.com/Darkness4/auth-htmx/auth/webauthn/session/memory"
 	"github.com/Darkness4/auth-htmx/database"
@@ -35,7 +34,6 @@ import (
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -102,33 +100,27 @@ var app = &cli.App{
 	},
 	Suggest: true,
 	Action: func(cCtx *cli.Context) error {
-		ctx := cCtx.Context
+		//ctx := cCtx.Context
 		log.Level(zerolog.DebugLevel)
 
-		// Parse config
-		var config auth.Config
-		if err := func() error {
-			file, err := os.Open(configPath)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-
-			return yaml.NewDecoder(file).Decode(&config)
-		}(); err != nil {
-			return err
-		}
-
-		providers, err := auth.GenerateProviders(ctx, config, fmt.Sprintf("%s/callback", publicURL))
-		if err != nil {
-			return err
-		}
-
-		// Auth
-		authService := oauth.OAuth{
-			JWTSecret: jwt.Secret(jwtSecret),
-			Providers: providers,
-		}
+		//// Parse config
+		//var config auth.Config
+		//if err := func() error {
+		//	file, err := os.Open(configPath)
+		//	if err != nil {
+		//		return err
+		//	}
+		//	defer file.Close()
+		//
+		//	return yaml.NewDecoder(file).Decode(&config)
+		//}(); err != nil {
+		//	return err
+		//}
+		//
+		//providers, err := auth.GenerateProviders(ctx, config, fmt.Sprintf("%s/callback", publicURL))
+		//if err != nil {
+		//	return err
+		//}
 
 		// Router
 		r := chi.NewRouter()
@@ -147,9 +139,7 @@ var app = &cli.App{
 		}
 
 		// Auth
-		r.Get("/login", authService.Login())
 		r.Get("/logout", auth.Logout)
-		r.Get("/callback", authService.CallBack())
 
 		u, err := url.Parse(publicURL)
 		if err != nil {
@@ -157,9 +147,9 @@ var app = &cli.App{
 		}
 
 		webAuthn, err := webauthn.New(&webauthn.Config{
-			RPDisplayName: "Auth HTMX",  // Display Name for your site
-			RPID:          u.Hostname(), // Generally the domain name for your site
-			RPOrigin:      publicURL,    // The origin URL for WebAuthn requests
+			RPDisplayName: "PasskeyDemo",       // Display Name for your site
+			RPID:          u.Hostname(),        // Generally the domain name for your site
+			RPOrigins:     []string{publicURL}, // The origin URL for WebAuthn requests
 		})
 		if err != nil {
 			panic(err)
@@ -172,23 +162,21 @@ var app = &cli.App{
 			jwt.Secret(jwtSecret),
 		)
 
-		if config.SelfHostUsers {
-			r.Route("/webauthn", func(r chi.Router) {
-				r.Route("/login", func(r chi.Router) {
-					r.Get("/begin", webauthnS.BeginLogin())
-					r.Post("/finish", webauthnS.FinishLogin())
-				})
-				r.Route("/register", func(r chi.Router) {
-					r.Get("/begin", webauthnS.BeginRegistration())
-					r.Post("/finish", webauthnS.FinishRegistration())
-				})
-				r.Route("/add-device", func(r chi.Router) {
-					r.Get("/begin", webauthnS.BeginAddDevice())
-					r.Post("/finish", webauthnS.FinishAddDevice())
-				})
-				r.Post("/delete-device", webauthnS.DeleteDevice())
+		r.Route("/webauthn", func(r chi.Router) {
+			r.Route("/login", func(r chi.Router) {
+				r.Get("/begin", webauthnS.BeginLogin())
+				r.Post("/finish", webauthnS.FinishLogin())
 			})
-		}
+			r.Route("/register", func(r chi.Router) {
+				r.Get("/begin", webauthnS.BeginRegistration())
+				r.Post("/finish", webauthnS.FinishRegistration())
+			})
+			r.Route("/add-device", func(r chi.Router) {
+				r.Get("/begin", webauthnS.BeginAddDevice())
+				r.Post("/finish", webauthnS.FinishAddDevice())
+			})
+			r.Post("/delete-device", webauthnS.DeleteDevice())
+		})
 
 		// Backend
 		cr := counter.NewRepository(d)
@@ -222,21 +210,17 @@ var app = &cli.App{
 				return
 			}
 			if err := t.ExecuteTemplate(w, "base", struct {
-				UserName      string
-				UserID        string
-				Provider      string
-				Credentials   []webauthn.Credential
-				CSRFToken     string
-				Providers     map[string]oauth.Provider
-				SelfHostUsers bool
+				UserName    string
+				UserID      string
+				Provider    string
+				Credentials []webauthn.Credential
+				CSRFToken   string
 			}{
-				UserName:      claims.Subject,
-				UserID:        claims.ID,
-				Provider:      claims.Provider,
-				Credentials:   claims.Credentials,
-				CSRFToken:     csrf.Token(r),
-				Providers:     providers,
-				SelfHostUsers: config.SelfHostUsers,
+				UserName:    claims.Subject,
+				UserID:      claims.ID,
+				Provider:    claims.Provider,
+				Credentials: claims.Credentials,
+				CSRFToken:   csrf.Token(r),
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -249,7 +233,7 @@ var app = &cli.App{
 		r.Handle("/static/*", http.FileServer(http.FS(static)))
 
 		log.Info().Msg("listening")
-		return http.ListenAndServe(":3000", csrf.Protect(key)(r))
+		return http.ListenAndServeTLS(":3000", "server.crt", "server.key", csrf.Protect(key)(r))
 	},
 }
 
@@ -265,7 +249,7 @@ func funcs() template.FuncMap {
 
 func main() {
 	_ = godotenv.Load(".env.local")
-	_ = godotenv.Load(".env")
+	//_ = godotenv.Load(".env")
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal().Err(err).Msg("app crashed")
 	}
